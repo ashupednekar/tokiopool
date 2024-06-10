@@ -12,10 +12,11 @@ pub struct TokioPoolExecutor {
 impl TokioPoolExecutor {
     #[new]
     fn new(max_workers: i32) -> TokioPoolExecutor {
-        TokioPoolExecutor {
-            max_workers,
-            rt: Runtime::new().unwrap(),
-        }
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        TokioPoolExecutor { max_workers, rt }
     }
 
     #[pyo3(signature = (function, *py_args, **py_kwargs))]
@@ -31,11 +32,20 @@ impl TokioPoolExecutor {
             function, py_args, py_kwargs
         );
         py.allow_threads(move || {
-            self.rt.block_on(tokio::spawn(async move {
-                Python::with_gil(|py| {
-                    function.call(py, ("a",), None);
-                });
-            }));
+            let rt = tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(async {
+                for _ in 1..100 {
+                    let f = function.clone();
+                    tokio::spawn(async move {
+                        Python::with_gil(|py| {
+                            f.call(py, ("a",), None);
+                        })
+                    });
+                }
+            });
         });
     }
 
