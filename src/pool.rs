@@ -1,6 +1,7 @@
 use ::tokio::runtime::Runtime;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyFunction, PyTuple};
+use tokio::time::{sleep, Duration};
 
 #[pyclass]
 pub struct TokioPoolExecutor {
@@ -19,32 +20,29 @@ impl TokioPoolExecutor {
         TokioPoolExecutor { max_workers, rt }
     }
 
-    #[pyo3(signature = (function, *py_args, **py_kwargs))]
+    #[pyo3(signature = (function, *args, **kwargs))]
     pub fn submit(
         &self,
         py: Python,
         function: Py<PyFunction>,
-        py_args: &PyTuple,
-        py_kwargs: Option<&PyDict>,
+        args: Py<PyTuple>,
+        kwargs: Option<Py<PyDict>>,
     ) {
         println!(
             "func: {:?}, args: {:?}, kwargs: {:?}",
-            function, py_args, py_kwargs
+            function, args, kwargs
         );
         py.allow_threads(move || {
-            let rt = tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .unwrap();
-            rt.block_on(async {
-                for _ in 1..100 {
-                    let f = function.clone();
-                    tokio::spawn(async move {
-                        Python::with_gil(|py| {
-                            f.call(py, ("a",), None);
-                        })
+            self.rt.block_on(async {
+                let f = function.clone();
+                tokio::spawn(async move {
+                    println!("calling");
+                    Python::with_gil(|py| {
+                        let r = f.call(py, ("a",), None);
+                        println!("r: {:?}", r);
                     });
-                }
+                    println!("called");
+                });
             });
         });
     }
